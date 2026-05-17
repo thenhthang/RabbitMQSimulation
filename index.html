@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RabbitMQ: Full Simulation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-main: #0f172a;
+            --bg-canvas: #1e293b;
+            --rabbit: #ff6600;
+            --rabbit-glow: rgba(255, 102, 0, 0.4);
+            --info: #0ea5e9;
+            --info-glow: rgba(14, 165, 233, 0.4);
+            --error: #ef4444;
+            --error-glow: rgba(239, 68, 68, 0.4);
+            --worker: #334155;
+            --text-light: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --topic1: #8b5cf6;
+            --topic2: #10b981;
+            --topic3: #f59e0b;
+            --fanout-color: #d946ef;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-main);
+            color: var(--text-light);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        h2 {
+            font-weight: 800;
+            font-size: 28px;
+            margin-bottom: 5px;
+            background: linear-gradient(135deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .canvas {
+            position: relative;
+            width: 1050px;
+            height: 600px;
+            background: var(--bg-canvas);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        /* SVG Lines */
+        .connections {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .path-line {
+            fill: none;
+            stroke: #475569;
+            stroke-width: 2;
+            stroke-dasharray: 6;
+            animation: dash 20s linear infinite;
+        }
+        .path-info { stroke: rgba(14, 165, 233, 0.3); }
+        .path-error { stroke: rgba(239, 68, 68, 0.3); }
+        
+        @keyframes dash {
+            to { stroke-dashoffset: -1000; }
+        }
+
+        .node {
+            position: absolute;
+            background: var(--bg-canvas);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .exchange {
+            left: 140px;
+            top: 250px;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 3px solid var(--rabbit);
+            background: linear-gradient(145deg, #2a1b15, #1a120f);
+            box-shadow: 0 0 30px var(--rabbit-glow);
+        }
+        .exchange b { color: var(--rabbit); font-size: 16px; letter-spacing: 1px;}
+        .exchange small { color: #fdba74; font-size: 11px; margin-top: 4px; text-transform: uppercase;}
+
+        .queue {
+            left: 420px;
+            width: 180px;
+            height: 70px;
+            border-radius: 12px;
+            border: 2px solid;
+            background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%);
+            backdrop-filter: blur(10px);
+        }
+        .queue b { font-size: 15px; margin-bottom: 2px; }
+        .queue small { font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(0,0,0,0.3); }
+        
+        .queue.stopped {
+            opacity: 0.4;
+            filter: grayscale(1);
+            border-color: #475569 !important;
+            box-shadow: none !important;
+        }
+        
+        .queue-toggle {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid #475569;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #10b981;
+            transition: all 0.2s;
+            padding: 0;
+            box-shadow: none;
+        }
+        .queue-toggle:hover {
+            background: rgba(0,0,0,0.6);
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+        }
+        .queue.stopped .queue-toggle {
+            color: #ef4444;
+            border-color: #ef4444;
+        }
+        .queue.stopped .queue-toggle:hover {
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+
+        .q-a { top: 60px; border-color: var(--info); box-shadow: 0 0 20px var(--info-glow); }
+        .q-a small { color: var(--info); }
+        .q-c { top: 220px; border-color: var(--info); box-shadow: 0 0 20px var(--info-glow); }
+        .q-c small { color: var(--info); }
+        .q-b { top: 450px; border-color: var(--error); box-shadow: 0 0 20px var(--error-glow); }
+        .q-b small { color: var(--error); }
+
+        .worker {
+            right: 60px;
+            width: 130px;
+            height: 60px;
+            background: linear-gradient(145deg, #334155, #1e293b);
+            border: 1px solid #475569;
+            color: var(--text-light);
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .worker::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            margin-bottom: 5px;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .w-active {
+            box-shadow: 0 0 25px #fbbf24;
+            border-color: #fbbf24;
+            transform: scale(1.08) translateY(-2px);
+            background: #453511;
+        }
+        .w-active::before { background: #fbbf24; box-shadow: 0 0 10px #fbbf24; }
+
+        .publisher {
+            left: 20px;
+            top: 275px;
+            width: 90px;
+            height: 70px;
+            border-radius: 12px;
+            border: 2px solid #64748b;
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            box-shadow: 0 0 20px rgba(100, 116, 139, 0.4);
+        }
+        .publisher b { font-size: 14px; margin-bottom: 2px; color: #f8fafc; }
+        .publisher small { color: #94a3b8; font-size: 11px; }
+
+        .p-active {
+            box-shadow: 0 0 25px #0ea5e9;
+            border-color: #0ea5e9;
+            transform: scale(1.05);
+        }
+
+        .packet {
+            position: absolute;
+            width: 70px;
+            height: 32px;
+            color: white;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            z-index: 10;
+            opacity: 0;
+            transition: all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .binding-tag {
+            position: absolute;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-main);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid #334155;
+            z-index: 6;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .tag-info { color: var(--info); border-color: rgba(14, 165, 233, 0.3); }
+        .tag-error { color: var(--error); border-color: rgba(239, 68, 68, 0.3); }
+
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+        }
+
+        button {
+            padding: 14px 28px;
+            cursor: pointer;
+            border: none;
+            border-radius: 30px;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+        button:active { transform: translateY(1px); }
+        
+        .btn-info { background: linear-gradient(135deg, #0ea5e9, #0284c7); }
+        .btn-info:hover { box-shadow: 0 8px 25px var(--info-glow); }
+        .btn-error { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .btn-error:hover { box-shadow: 0 8px 25px var(--error-glow); }
+
+        .btn-fanout { background: linear-gradient(135deg, var(--fanout-color), #c026d3); }
+        .btn-fanout:hover { box-shadow: 0 8px 25px rgba(217, 70, 239, 0.4); }
+        
+        .btn-topic1 { background: linear-gradient(135deg, var(--topic1), #7c3aed); }
+        .btn-topic2 { background: linear-gradient(135deg, var(--topic2), #059669); }
+        .btn-topic3 { background: linear-gradient(135deg, var(--topic3), #d97706); }
+
+        .exchange-selector {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: var(--bg-canvas);
+            padding: 10px 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .exchange-selector select {
+            background: #0f172a;
+            color: white;
+            border: 1px solid #475569;
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .log-container {
+            width: 1050px;
+            margin-top: 25px;
+            background: #000;
+            border-radius: 12px;
+            border: 1px solid #334;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        .log-header {
+            background: #1e293b;
+            padding: 8px 15px;
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid #334;
+        }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .dot.r { background: #ff5f56; }
+        .dot.y { background: #ffbd2e; }
+        .dot.g { background: #27c93f; }
+
+        .log {
+            height: 140px;
+            color: #10b981;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .log b { color: #fff; }
+        .log-time { color: #64748b; font-size: 11px; margin-right: 10px; }
+
+        /* Custom scrollbar for log */
+        .log::-webkit-scrollbar { width: 8px; }
+        .log::-webkit-scrollbar-track { background: #000; }
+        .log::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <h2>Mô tả cách hoạt động của RabbitMq</h2>
+    <div class="subtitle" id="main-subtitle">Direct Exchange • Multicast • Round-Robin Dispatching</div>
+
+    <div class="exchange-selector">
+        <label style="color: var(--text-muted); font-weight: 600; font-size: 14px;">Chọn loại Exchange:</label>
+        <select id="exchange-type" onchange="changeExchangeType(this.value)">
+            <option value="direct">Direct Exchange</option>
+            <option value="fanout">Fanout Exchange</option>
+            <option value="topic">Topic Exchange</option>
+        </select>
+    </div>
+
+    <div class="canvas" id="stage">
+        <!-- SVG Connections to make it look like a real diagram -->
+        <svg class="connections">
+            <!-- Publisher to Exchange -->
+            <path class="path-line" d="M 110 310 L 140 310" />
+
+            <!-- Exchange to QA -->
+            <path class="path-line path-info" d="M 260 310 C 320 310, 350 95, 420 95" />
+            <!-- Exchange to QC -->
+            <path class="path-line path-info" d="M 260 310 C 320 310, 350 255, 420 255" />
+            <!-- Exchange to QB -->
+            <path class="path-line path-error" d="M 260 310 C 320 310, 350 485, 420 485" />
+            
+            <!-- QA to Workers -->
+            <path class="path-line" d="M 600 95 C 700 95, 750 60, 860 60" />
+            <path class="path-line" d="M 600 95 C 700 95, 750 130, 860 130" />
+            <!-- QC to Worker -->
+            <path class="path-line" d="M 600 255 L 860 255" />
+            <!-- QB to Worker -->
+            <path class="path-line" d="M 600 485 L 860 485" />
+        </svg>
+
+        <div id="publisher" class="node publisher">
+            <b>PUBLISHER</b>
+            <small>Producer</small>
+        </div>
+
+        <div class="node exchange">
+            <b>EXCHANGE</b>
+            <small id="exc-type-label">Direct Type</small>
+        </div>
+
+        <!-- Bindings -->
+        <div class="binding-tag tag-info" style="top: 130px; left: 290px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span id="bind-a"> Info Msg</span>
+        </div>
+        <div class="binding-tag tag-info" style="top: 240px; left: 290px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span id="bind-c"> Info Msg</span>
+        </div>
+        <div class="binding-tag tag-error" style="top: 430px; left: 290px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+            <span id="bind-b"> Error Msg</span>
+        </div>
+
+        <!-- Queues -->
+        <div id="q-a" class="node queue q-a">
+            <button class="queue-toggle" onclick="toggleQueue('a')" title="Bật/Tắt Queue">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            </button>
+            <b>Queue A</b>
+            <!--<small id="q-a-label">Binding: info</small>-->
+            <small id="q-a-label">Binding <br/>
+                To: QueueA, RoutingKey: info</small>
+        </div>
+        <div id="q-c" class="node queue q-c">
+            <button class="queue-toggle" onclick="toggleQueue('c')" title="Bật/Tắt Queue">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            </button>
+            <b>Queue C</b>
+            <small id="q-c-label">Binding <br/>
+                To: QueueC, RoutingKey: info</small>
+        </div>
+        <div id="q-b" class="node queue q-b">
+            <button class="queue-toggle" onclick="toggleQueue('b')" title="Bật/Tắt Queue">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+            </button>
+            <b>Queue B</b>
+            <small id="q-b-label">Binding <br/>
+            To: QueueB, RoutingKey: error</small>
+        </div>
+
+        <!-- Workers -->
+        <div class="node worker q-a" id="w1" style="top: 30px;">
+            <b>Worker 1</b> 
+            <small id="q-a-label">Queue: Queue A</small>
+            <small id="q-a-label">Routing Key: Info</small>
+        </div>
+        <div class="node worker q-a" id="w2" style="top: 100px;">
+            Worker 2
+            <small id="q-a-label">Queue: Queue A</small>
+            <small id="q-a-label">Routing Key: Info</small>
+        </div>
+        <div class="node worker q-c" id="w4" style="top: 225px;">
+            Worker 4
+            <small id="q-a-label">Queue: Queue C</small>
+            <small id="q-a-label">Routing Key: Info</small>
+
+        </div>
+        <div class="node worker q-b" id="w5" style="top: 455px; border-color: rgba(239, 68, 68, 0.5);">
+            Worker 5
+            <small id="q-a-label">Queue: Queue B</small>
+            <small id="q-a-label">Routing Key: Error</small>
+        </div>
+    </div>
+
+    <div class="controls" id="dynamic-controls">
+        <button class="btn-info" onclick="handleSend('info')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"></path><path d="M22 2L15 22L11 13L2 9L22 2Z"></path></svg>
+            Publish INFO (Multicast A & C)
+        </button>
+        <button class="btn-error" onclick="handleSend('error')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            Publish ERROR (Direct to B)
+        </button>
+    </div>
+
+    <div class="log-container">
+        <div class="log-header">
+            <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+        </div>
+        <div class="log" id="console">
+            <span class="log-time">00:00:00</span> > RabbitMQ Server is ready. Waiting for messages...<br>
+        </div>
+    </div>
+
+    <script>
+        let aTurn = 1; 
+        let activeQueues = { a: true, b: true, c: true };
+        
+        function toggleQueue(q) {
+            activeQueues[q] = !activeQueues[q];
+            const qEl = document.getElementById('q-' + q);
+            if (!activeQueues[q]) {
+                qEl.classList.add('stopped');
+                log(`Đã <b>TẮT</b> Queue ${q.toUpperCase()}.`);
+            } else {
+                qEl.classList.remove('stopped');
+                log(`Đã <b>BẬT</b> Queue ${q.toUpperCase()}.`);
+            }
+        }
+        
+        function getTimestamp() {
+            const now = new Date();
+            return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
+        }
+
+        function log(m) { 
+            const c = document.getElementById('console'); 
+            c.innerHTML = `<span class="log-time">${getTimestamp()}</span> > ${m}<br>${c.innerHTML}`; 
+        }
+
+        function changeExchangeType(val) {
+            const subtitle = document.getElementById('main-subtitle');
+            const excLabel = document.getElementById('exc-type-label');
+            const controls = document.getElementById('dynamic-controls');
+            
+            const bindA = document.getElementById('bind-a');
+            const bindC = document.getElementById('bind-c');
+            const bindB = document.getElementById('bind-b');
+            
+            const qALabel = document.getElementById('q-a-label');
+            const qCLabel = document.getElementById('q-c-label');
+            const qBLabel = document.getElementById('q-b-label');
+
+            excLabel.innerText = val.charAt(0).toUpperCase() + val.slice(1) + ' Type';
+
+            if (val === 'direct') {
+                subtitle.innerText = "Direct Exchange • Multicast • Round-Robin Dispatching";
+                bindA.innerText = "Info Msg"; qALabel.innerText = "Binding - To: QueueA, RoutingKey: info";
+                bindC.innerText = "Info Msg"; qCLabel.innerText = "Binding - To: QueueC, RoutingKey: info";
+                bindB.innerText = "Error Msg"; qBLabel.innerText = "Binding - To: QueueB, RoutingKey: error";
+                
+                controls.innerHTML = `
+                    <button class="btn-info" onclick="handleSend('info')">Publish INFO (Multicast A & C)</button>
+                    <button class="btn-error" onclick="handleSend('error')">Publish ERROR (Direct to B)</button>
+                `;
+                log("Đã chuyển sang <b>Direct Exchange</b>. Định tuyến dựa trên so khớp chính xác Routing Key.");
+            } else if (val === 'fanout') {
+                subtitle.innerText = "Fanout Exchange • Broadcasting • Ignoring Routing Keys";
+                bindA.innerText = "Ignored"; qALabel.innerText = "Binding: (ignored)";
+                bindC.innerText = "Ignored"; qCLabel.innerText = "Binding: (ignored)";
+                bindB.innerText = "Ignored"; qBLabel.innerText = "Binding: (ignored)";
+                
+                controls.innerHTML = `
+                    <button class="btn-fanout" onclick="handleSend('broadcast')">Broadcast Message (To ALL Queues)</button>
+                `;
+                log("Đã chuyển sang <b>Fanout Exchange</b>. Sẽ broadcast tin nhắn đến tất cả Queue, bỏ qua Routing Key.");
+            } else if (val === 'topic') {
+                subtitle.innerText = "Topic Exchange • Pattern Matching • Wildcards (*, #)";
+                bindA.innerText = "Pattern: '*.info'"; qALabel.innerText = "Binding: *.info";
+                bindC.innerText = "Pattern: 'app.#'"; qCLabel.innerText = "Binding: app.#";
+                bindB.innerText = "Pattern: '*.error'"; qBLabel.innerText = "Binding: *.error";
+                
+                controls.innerHTML = `
+                    <button class="btn-topic1" onclick="handleSend('app.info')">Publish 'app.info'</button>
+                    <button class="btn-topic2" onclick="handleSend('sys.error')">Publish 'sys.error'</button>
+                    <button class="btn-topic3" onclick="handleSend('app.error')">Publish 'app.error'</button>
+                `;
+                log("Đã chuyển sang <b>Topic Exchange</b>. Định tuyến dựa trên pattern matching (wildcards).");
+            }
+        }
+
+        function createP(rk) {
+            const p = document.createElement('div');
+            p.className = 'packet';
+            p.innerText = rk.toUpperCase().substring(0, 9); // truncate text if too long
+            p.style.width = '75px';
+            
+            const type = document.getElementById('exchange-type').value;
+
+            if (type === 'direct') {
+                if (rk === 'info') {
+                    p.style.background = 'linear-gradient(135deg, #0ea5e9, #0284c7)';
+                    p.style.boxShadow = '0 0 15px rgba(14, 165, 233, 0.6)';
+                } else {
+                    p.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                    p.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.6)';
+                }
+            } else if (type === 'fanout') {
+                p.style.background = 'linear-gradient(135deg, var(--fanout-color), #c026d3)';
+                p.style.boxShadow = '0 0 15px rgba(217, 70, 239, 0.6)';
+            } else if (type === 'topic') {
+                if (rk === 'app.info') p.style.background = 'linear-gradient(135deg, var(--topic1), #7c3aed)';
+                else if (rk === 'sys.error') p.style.background = 'linear-gradient(135deg, var(--topic2), #059669)';
+                else p.style.background = 'linear-gradient(135deg, var(--topic3), #d97706)';
+                p.style.boxShadow = '0 0 15px rgba(255, 255, 255, 0.3)';
+            }
+            
+            document.getElementById('stage').appendChild(p);
+            return p;
+        }
+
+        function evaluateTargets(type, rk) {
+            let targets = [];
+            if (type === 'direct') {
+                if (rk === 'info') targets.push('a', 'c');
+                if (rk === 'error') targets.push('b');
+            } else if (type === 'fanout') {
+                targets.push('a', 'b', 'c'); // Phát tới tất cả
+            } else if (type === 'topic') {
+                // Queue A match Pattern: *.info
+                if (rk.endsWith('.info')) targets.push('a');
+                // Queue B match Pattern: *.error
+                if (rk.endsWith('.error')) targets.push('b');
+                // Queue C match Pattern: app.#
+                if (rk.startsWith('app.')) targets.push('c');
+            }
+            
+            // Chỉ giữ lại các Queue đang bật (active)
+            return targets.filter(t => activeQueues[t]);
+        }
+
+        function handleSend(rk) {
+            const type = document.getElementById('exchange-type').value;
+            log(`--- Producer published message [${type.toUpperCase()}] key: <b>'${rk}'</b> ---`);
+            
+            // Hiệu ứng Publisher đang gửi tin
+            const pubNode = document.getElementById('publisher');
+            if (pubNode) {
+                pubNode.classList.add('p-active');
+                setTimeout(() => pubNode.classList.remove('p-active'), 300);
+            }
+            
+            const pMain = createP(rk);
+            pMain.style.left = '28px'; // Căn giữa bên trong Publisher
+            pMain.style.top = '294px'; 
+            pMain.style.opacity = 1;
+
+            // 1. Move to Exchange
+            setTimeout(() => {
+                pMain.style.left = '165px'; 
+                pMain.style.top = '295px';
+            }, 100);
+
+            // 2. Exchange Routing Logic
+            setTimeout(() => {
+                const targets = evaluateTargets(type, rk);
+                
+                if (targets.length === 0) {
+                    log(`Exchange: Không có Queue nào phù hợp (hoặc đã bị tắt) cho <b>'${rk}'</b>. Tin nhắn bị huỷ (Dropped).`);
+                    pMain.style.opacity = 0;
+                    setTimeout(() => pMain.remove(), 700);
+                    return;
+                }
+
+                log(`Exchange: Matched ➔ Routing to: <b>${targets.map(t => 'Queue ' + t.toUpperCase()).join(', ')}</b>.`);
+                
+                targets.forEach((t, index) => {
+                    const p = (index === 0) ? pMain : createP(rk);
+                    p.style.left = '165px'; 
+                    p.style.top = '295px'; 
+                    p.style.opacity = 1;
+                    
+                    // Force reflow for clone
+                    if (index !== 0) void p.offsetWidth;
+
+                    // Move to Queues
+                    setTimeout(() => {
+                        if (t === 'a') { p.style.left = '420px'; p.style.top = '80px'; }
+                        if (t === 'c') { p.style.left = '420px'; p.style.top = '240px'; }
+                        if (t === 'b') { p.style.left = '420px'; p.style.top = '470px'; }
+                    }, 50);
+
+                    // 3. Distribute to Workers
+                    setTimeout(() => {
+                        if (t === 'a') {
+                            const targetW = aTurn === 1 ? 'w1' : 'w2';
+                            const targetY = aTurn === 1 ? 45 : 115;
+                            const currentTurn = aTurn;
+                            aTurn = aTurn === 1 ? 2 : 1; // Update turn for next task
+                            p.style.left = '860px'; p.style.top = targetY + 'px'; p.style.opacity = 0;
+                            animateWorker(targetW);
+                            log(`Queue A ➔ Dispatching to <b>Worker ${currentTurn}</b> (Round-robin)`);
+                        } else if (t === 'c') {
+                            p.style.left = '860px'; p.style.top = '240px'; p.style.opacity = 0;
+                            animateWorker('w4');
+                            log(`Queue C ➔ Dispatching to <b>Worker 4</b>`);
+                        } else if (t === 'b') {
+                            p.style.left = '860px'; p.style.top = '470px'; p.style.opacity = 0;
+                            animateWorker('w5');
+                            log(`Queue B ➔ Dispatching to <b>Worker 5</b>`);
+                        }
+                        setTimeout(() => p.remove(), 700);
+                    }, 1200);
+                });
+            }, 1000);
+        }
+
+        function animateWorker(id) {
+            const el = document.getElementById(id);
+            el.classList.add('w-active');
+            setTimeout(() => el.classList.remove('w-active'), 800);
+        }
+    </script>
+</body>
+</html>
