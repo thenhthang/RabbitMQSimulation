@@ -377,12 +377,12 @@
             <!-- Exchange to QB -->
             <path class="path-line path-error" d="M 260 310 C 320 310, 350 485, 420 485" />
             
-            <!-- QA to Workers -->
+            <!-- QA to Consumers -->
             <path class="path-line" d="M 600 95 C 700 95, 750 60, 860 60" />
             <path class="path-line" d="M 600 95 C 700 95, 750 130, 860 130" />
-            <!-- QC to Worker -->
+            <!-- QC to Consumer -->
             <path class="path-line" d="M 600 255 L 860 255" />
-            <!-- QB to Worker -->
+            <!-- QB to Consumer -->
             <path class="path-line" d="M 600 485 L 860 485" />
         </svg>
 
@@ -437,25 +437,25 @@
             To: QueueB, RoutingKey: error</small>
         </div>
 
-        <!-- Workers -->
+        <!-- Consumers -->
         <div class="node worker q-a" id="w1" style="top: 30px;">
-            <b>Worker 1</b> 
+            <b>Consumer 1</b> 
             <small id="q-a-label">Queue: Queue A</small>
             <small id="q-a-label">Routing Key: Info</small>
         </div>
         <div class="node worker q-a" id="w2" style="top: 100px;">
-            Worker 2
+            Consumer 2
             <small id="q-a-label">Queue: Queue A</small>
             <small id="q-a-label">Routing Key: Info</small>
         </div>
         <div class="node worker q-c" id="w4" style="top: 225px;">
-            Worker 4
+            Consumer 4
             <small id="q-a-label">Queue: Queue C</small>
             <small id="q-a-label">Routing Key: Info</small>
 
         </div>
         <div class="node worker q-b" id="w5" style="top: 455px; border-color: rgba(239, 68, 68, 0.5);">
-            Worker 5
+            Consumer 5
             <small id="q-a-label">Queue: Queue B</small>
             <small id="q-a-label">Routing Key: Error</small>
         </div>
@@ -659,7 +659,7 @@
                         if (t === 'b') { p.style.left = '420px'; p.style.top = '470px'; }
                     }, 50);
 
-                    // 3. Distribute to Workers
+                    // 3. Distribute to Consumers
                     setTimeout(() => {
                         if (t === 'a') {
                             const targetW = aTurn === 1 ? 'w1' : 'w2';
@@ -668,15 +668,15 @@
                             aTurn = aTurn === 1 ? 2 : 1; // Update turn for next task
                             p.style.left = '860px'; p.style.top = targetY + 'px'; p.style.opacity = 0;
                             animateWorker(targetW);
-                            log(`Queue A ➔ Dispatching to <b>Worker ${currentTurn}</b> (Round-robin)`);
+                            log(`Queue A ➔ Dispatching to <b>Consumer ${currentTurn}</b> (Round-robin)`);
                         } else if (t === 'c') {
                             p.style.left = '860px'; p.style.top = '240px'; p.style.opacity = 0;
                             animateWorker('w4');
-                            log(`Queue C ➔ Dispatching to <b>Worker 4</b>`);
+                            log(`Queue C ➔ Dispatching to <b>Consumer 4</b>`);
                         } else if (t === 'b') {
                             p.style.left = '860px'; p.style.top = '470px'; p.style.opacity = 0;
                             animateWorker('w5');
-                            log(`Queue B ➔ Dispatching to <b>Worker 5</b>`);
+                            log(`Queue B ➔ Dispatching to <b>Consumer 5</b>`);
                         }
                         setTimeout(() => p.remove(), 700);
                     }, 1200);
